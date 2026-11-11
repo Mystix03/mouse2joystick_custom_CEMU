@@ -34,6 +34,7 @@ SetWorkingDir %A_ScriptDir%  											; Ensures a consistent starting director
 #MaxHotkeysPerInterval 210
 #HotkeyInterval 1000
 #InstallMouseHook
+#InstallKeybdHook
 #SingleInstance Force
 CoordMode,Mouse,Screen
 SetMouseDelay,-1
@@ -91,6 +92,7 @@ BotWmouseWheel=0
 lockZL=0
 lockZLToggleKey=Numpad1
 hideCursor=1
+releaseCursorOnTab=1
 BotWmotionAim=0
 useAltMouseMethod=0
 alt_xSen=400
@@ -131,6 +133,11 @@ Loop,Parse,allSections,`n
 	}
 }
 readSettingsSkippedDueToError:	; This comes from setSettingsToDefault If there was an error.
+
+IF (releaseCursorOnTab = "")
+	releaseCursorOnTab := 1
+tabCursorReleased := False
+mouseHotkeysList := []
 
 pi:=atan(1)*4													; Approx pi.
 
@@ -289,6 +296,7 @@ Return
 ; This switches on/off the controller.
 controllerSwitch:
 	IF (toggle) { ; Starting controller
+		tabCursorReleased := False
 		IF (autoActivateGame) {
 			WinActivate,ahk_exe %gameExe%
 			WinWaitActive, ahk_exe %gameExe%,,2
@@ -335,6 +343,10 @@ controllerSwitch:
 
 	}
 	Else {	; Shutting down controller
+		IF (tabCursorReleased) {
+			tabCursorReleased := False
+			GoSub, enableMouseHotkeys
+		}
 		setStick(0,0)															; Stick in equilibrium.
 		setStick(0,0, True)
 		IF (useAltMouseMethod) {
@@ -384,6 +396,7 @@ mouse2joystickHotkeys:
 		Hotkey,%rightKey%, overwriteRight, on 
 		Hotkey,%rightKey% Up, overwriteRightup, on
 	KeyList := []
+	mouseHotkeysList := []
 	Loop, Parse, joystickButtonKeyList, `,
 	{
 		useButton := A_Index
@@ -395,7 +408,13 @@ mouse2joystickHotkeys:
 			KeyList[keyName] := useButton
 			Hotkey,%keyName%, pressJoyButton, on 
 			Hotkey,%keyName% Up, releaseJoyButton, on
+			IF InStr(",LButton,RButton,MButton,XButton1,XButton2,WheelUp,WheelDown,WheelLeft,WheelRight,", "," . keyName . ",")
+				mouseHotkeysList.Push(keyName)
 		}
+	}
+	IF (releaseCursorOnTab) {
+		Hotkey, *Tab, releaseCursorDown, on
+		Hotkey, *Tab Up, releaseCursorUp, on
 	}
 	Hotkey, IF
 Return
@@ -741,6 +760,100 @@ ReleaseDPad:
 	SetTimer, ReleaseDPad, Off
 Return
 
+releaseCursorDown:
+	IF (tabCursorReleased)
+		Return
+	tabCursorReleased := True
+	setStick(0,0)
+	IF (useAltMouseMethod) {
+		LockMouseToWindow(False)
+		md.Stop()
+	}
+	Else {
+		SetTimer, mouseTojoystick, Off
+	}
+	IF (hideCursor)
+		show_Mouse(True)
+	Gui, Controller:Hide
+	GoSub, disableMouseHotkeys
+Return
+
+releaseCursorUp:
+	IF (!tabCursorReleased)
+		Return
+	tabCursorReleased := False
+	GoSub, enableMouseHotkeys
+	IF (!toggle) { ; Controller is currently active
+		IF (autoActivateGame AND WinExist("ahk_exe " . gameExe)) {
+			WinActivate, ahk_exe %gameExe%
+			WinGetPos, gameX, gameY, gameW, gameH, ahk_exe %gameExe%
+			OX := gameX + gameW/2
+			OY := gameY + gameH/2
+		}
+		MouseMove, OX, OY
+		Gui, Controller:Show, NA
+		IF (hideCursor)
+			show_Mouse(False)
+		IF (useAltMouseMethod) {
+			md.Start()
+			LockMouseToWindow("ahk_id " . stick)
+		}
+		Else {
+			SetTimer, mouseTojoystick, %freq%
+		}
+	}
+Return
+
+disableMouseHotkeys:
+	Hotkey, IF, (!toggle && mouse2joystick)
+	For _, mKey in mouseHotkeysList {
+		Try Hotkey, %mKey%, Off
+		Try Hotkey, %mKey% Up, Off
+		mBtnNum := KeyList[mKey]
+		IF (mBtnNum) {
+			IF (!vXBox)
+				vstick.SetBtn(0, mBtnNum)
+			Else {
+				Switch mBtnNum
+				{
+					Case 7:
+						vstick.SetAxisByIndex(0,6)
+					Case 8:
+						vstick.SetAxisByIndex(0,3)
+					Case 9:
+						vstick.SetBtn(0,mBtnNum-1)
+					Case 10:
+						vstick.SetBtn(0,mBtnNum-3)
+					Case 11,12:
+						vstick.SetBtn(0,mBtnNum-2)
+					Case 13,14,15,16:
+						vstick.SetPOV(-1)
+					Default:
+						vstick.SetBtn(0,mBtnNum)
+				}
+			}
+		}
+	}
+	IF (BotWmouseWheel) {
+		Try Hotkey, WheelUp, Off
+		Try Hotkey, WheelDown, Off
+	}
+	Hotkey, IF
+Return
+
+enableMouseHotkeys:
+	Hotkey, IF, (!toggle && mouse2joystick)
+	For _, mKey in mouseHotkeysList {
+		Try Hotkey, %mKey%, On
+		Try Hotkey, %mKey% Up, On
+	}
+	IF (BotWmouseWheel) {
+		Try Hotkey, WheelUp, overwriteWheelUp, On
+		Try Hotkey, WheelDown, overwriteWheelDown, On
+	}
+	Hotkey, IF
+Return
+
 ; Labels
 
 mouseTojoystick:
@@ -939,6 +1052,7 @@ getAngle(x,y) {
 
 exitFunc() {
 	Global
+	tabCursorReleased := False
 	IF (mouse2Joystick)	{
 		setStick(0,0)
 		SetStick(0,0, True)
@@ -1095,6 +1209,9 @@ GUI, Tab, Extra Settings
 	GUI, Add, GroupBox, xs yp+40 w320 h40,Hide Cursor
 	GUI, Add, CheckBox, % "xp+10 yp+20 vophideCursor Checked" . hideCursor, Hide cursor when controller toggled on?
 	
+	GUI, Add, GroupBox, xs yp+30 w320 h40,Release Cursor on Tab Hold
+	GUI, Add, CheckBox, % "xp+10 yp+20 vopreleaseCursorOnTab Checked" . releaseCursorOnTab, Temporarily release cursor when Tab is held?
+	
 	GUI, Font, cRed Bold
 	GUI, Add, GroupBox, xs yp+30 w320 h65,EXPERIMENTAL Alternate Mouse Detection
 	GUI, Font,
@@ -1187,6 +1304,8 @@ mainSave:
 			Hotkey,%keyName% Up, releaseJoyButton, off
 		}
 	}
+	Try Hotkey, *Tab, Off
+	Try Hotkey, *Tab Up, Off
 	Hotkey, If
 
 	; Read settings.
@@ -1255,6 +1374,7 @@ SubmitAll:
 	IniWrite, % oplockZL- 1, settings.ini, Extra Settings, lockZL
 	IniWrite, % oplockZLToggleKey, settings.ini, Extra Settings, lockZLToggleKey
 	IniWrite, % ophideCursor, settings.ini, Extra Settings, hideCursor
+	IniWrite, % opreleaseCursorOnTab, settings.ini, Extra Settings, releaseCursorOnTab
 	IniWrite, % opuseAltMouseMethod, settings.ini, Extra Settings, useAltMouseMethod
 	IniWrite, % opalt_xSen, settings.ini, Extra Settings, alt_xSen
 	IniWrite, % opalt_ySen, settings.ini, Extra Settings, alt_ySen
@@ -1416,6 +1536,7 @@ BotWmouseWheel=0
 lockZL=0
 lockZLToggleKey=Numpad1
 hideCursor=1
+releaseCursorOnTab=1
 BotWmotionAim=0
 useAltMouseMethod=0
 alt_xSen=400

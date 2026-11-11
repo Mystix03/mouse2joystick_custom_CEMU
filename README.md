@@ -138,6 +138,8 @@ Note: you can still keep KeyList strings for different games saved to a text fil
 		* Cursor
 			* Choose if you would like cursor hidden
 				* Sometimes useful for troubleshooting to make it visible again.
+		* Release Cursor on Tab Hold
+			* When enabled, pressing and holding Tab temporarily releases the mouse pointer (restoring cursor visibility and allowing regular mouse movement and clicks) until Tab is released.
 
 
 ***
