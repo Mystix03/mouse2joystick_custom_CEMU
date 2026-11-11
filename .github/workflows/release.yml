@@ -22,47 +22,26 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install AutoHotkey v1
+      - name: Download and Setup AutoHotkey v1.1
         shell: pwsh
         run: |
-          choco install autohotkey.install --version=1.1.37.02 -y --no-progress
-
-      - name: Locate AutoHotkey Compiler & Base
-        id: ahk_paths
-        shell: pwsh
-        run: |
-          $possibleCompiler = @(
-            "C:\Program Files\AutoHotkey\Compiler\Ahk2Exe.exe",
-            "C:\Program Files\AutoHotkey\v1.1.37.02\Compiler\Ahk2Exe.exe"
-          )
-          $possibleBase = @(
-            "C:\Program Files\AutoHotkey\AutoHotkeyU64.exe",
-            "C:\Program Files\AutoHotkey\v1.1.37.02\AutoHotkeyU64.exe",
-            "C:\Program Files\AutoHotkey\Unicode 64-bit.bin",
-            "C:\Program Files\AutoHotkey\v1.1.37.02\Unicode 64-bit.bin"
-          )
-
-          $compiler = $possibleCompiler | Where-Object { Test-Path $_ } | Select-Object -First 1
-          $base = $possibleBase | Where-Object { Test-Path $_ } | Select-Object -First 1
-
-          if (-not $compiler -or -not $base) {
-            throw "Could not locate Ahk2Exe or 64-bit base file."
+          $zipPath = "$env:TEMP\AutoHotkey.zip"
+          Write-Host "Downloading official AutoHotkey 1.1.37.02..."
+          Invoke-WebRequest -Uri "https://www.autohotkey.com/download/1.1/AutoHotkey_1.1.37.02.zip" -OutFile $zipPath
+          Expand-Archive -Path $zipPath -DestinationPath "C:\AutoHotkey" -Force
+          if (-not (Test-Path "C:\AutoHotkey\Compiler\Ahk2Exe.exe")) {
+            throw "Failed to extract Ahk2Exe compiler."
           }
-
-          Write-Host "Compiler found: $compiler"
-          Write-Host "Base found: $base"
-          "compiler=$compiler" >> $env:GITHUB_OUTPUT
-          "base=$base" >> $env:GITHUB_OUTPUT
+          Write-Host "AutoHotkey 1.1.37.02 successfully installed to C:\AutoHotkey"
 
       - name: Compile mouse2joystick to EXE
         shell: pwsh
         run: |
-          $compiler = "${{ steps.ahk_paths.outputs.compiler }}"
-          $base = "${{ steps.ahk_paths.outputs.base }}"
-          cmd.exe /c "`"$compiler`" /in mouse2joystick_Custom_CEMU.ahk /out mouse2joystick_Custom_CEMU.exe /base `"$base`""
+          & "C:\AutoHotkey\Compiler\Ahk2Exe.exe" /in "mouse2joystick_Custom_CEMU.ahk" /out "mouse2joystick_Custom_CEMU.exe" /base "C:\AutoHotkey\AutoHotkeyU64.exe"
           if (-not (Test-Path "mouse2joystick_Custom_CEMU.exe")) {
-            throw "Compilation failed: mouse2joystick_Custom_CEMU.exe not found."
+            throw "Compilation failed: mouse2joystick_Custom_CEMU.exe was not created."
           }
+          Write-Host "Successfully compiled mouse2joystick_Custom_CEMU.exe"
 
       - name: Package Release ZIP
         shell: pwsh
@@ -80,6 +59,7 @@ jobs:
           Copy-Item "ScpVBus" -Destination $dist -Recurse
 
           Compress-Archive -Path "$dist\*" -DestinationPath "mouse2joystick_Custom_CEMU.zip" -Force
+          Write-Host "Successfully created mouse2joystick_Custom_CEMU.zip"
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
