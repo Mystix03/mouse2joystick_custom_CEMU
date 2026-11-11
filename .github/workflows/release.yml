@@ -26,8 +26,8 @@ jobs:
         shell: pwsh
         run: |
           $zipPath = "$env:TEMP\AutoHotkey.zip"
-          Write-Host "Downloading official AutoHotkey 1.1.37.02..."
-          Invoke-WebRequest -Uri "https://www.autohotkey.com/download/1.1/AutoHotkey_1.1.37.02.zip" -OutFile $zipPath
+          Write-Host "Downloading AutoHotkey 1.1.37.02 from official GitHub releases..."
+          Invoke-WebRequest -Uri "https://github.com/AutoHotkey/AutoHotkey/releases/download/v1.1.37.02/AutoHotkey_1.1.37.02.zip" -OutFile $zipPath
           Expand-Archive -Path $zipPath -DestinationPath "C:\AutoHotkey" -Force
           if (-not (Test-Path "C:\AutoHotkey\Compiler\Ahk2Exe.exe")) {
             throw "Failed to extract Ahk2Exe compiler."
