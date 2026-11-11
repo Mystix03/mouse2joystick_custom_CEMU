@@ -1,0 +1,96 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release Tag (e.g. v0.4.2)'
+        required: true
+        default: 'v0.4.2'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install AutoHotkey v1
+        shell: pwsh
+        run: |
+          choco install autohotkey.install --version=1.1.37.02 -y --no-progress
+
+      - name: Locate AutoHotkey Compiler & Base
+        id: ahk_paths
+        shell: pwsh
+        run: |
+          $possibleCompiler = @(
+            "C:\Program Files\AutoHotkey\Compiler\Ahk2Exe.exe",
+            "C:\Program Files\AutoHotkey\v1.1.37.02\Compiler\Ahk2Exe.exe"
+          )
+          $possibleBase = @(
+            "C:\Program Files\AutoHotkey\AutoHotkeyU64.exe",
+            "C:\Program Files\AutoHotkey\v1.1.37.02\AutoHotkeyU64.exe",
+            "C:\Program Files\AutoHotkey\Unicode 64-bit.bin",
+            "C:\Program Files\AutoHotkey\v1.1.37.02\Unicode 64-bit.bin"
+          )
+
+          $compiler = $possibleCompiler | Where-Object { Test-Path $_ } | Select-Object -First 1
+          $base = $possibleBase | Where-Object { Test-Path $_ } | Select-Object -First 1
+
+          if (-not $compiler -or -not $base) {
+            throw "Could not locate Ahk2Exe or 64-bit base file."
+          }
+
+          Write-Host "Compiler found: $compiler"
+          Write-Host "Base found: $base"
+          "compiler=$compiler" >> $env:GITHUB_OUTPUT
+          "base=$base" >> $env:GITHUB_OUTPUT
+
+      - name: Compile mouse2joystick to EXE
+        shell: pwsh
+        run: |
+          $compiler = "${{ steps.ahk_paths.outputs.compiler }}"
+          $base = "${{ steps.ahk_paths.outputs.base }}"
+          cmd.exe /c "`"$compiler`" /in mouse2joystick_Custom_CEMU.ahk /out mouse2joystick_Custom_CEMU.exe /base `"$base`""
+          if (-not (Test-Path "mouse2joystick_Custom_CEMU.exe")) {
+            throw "Compilation failed: mouse2joystick_Custom_CEMU.exe not found."
+          }
+
+      - name: Package Release ZIP
+        shell: pwsh
+        run: |
+          $dist = "dist_package"
+          New-Item -ItemType Directory -Path $dist -Force
+          Copy-Item "mouse2joystick_Custom_CEMU.exe" -Destination $dist
+          Copy-Item "mouse2joystick_Custom_CEMU.ahk" -Destination $dist
+          Copy-Item "settings.ini" -Destination $dist
+          Copy-Item "SavedKeyLists.ini" -Destination $dist
+          Copy-Item "README.md" -Destination $dist
+          Copy-Item "controllerProfiles" -Destination $dist -Recurse
+          Copy-Item "CvJI" -Destination $dist -Recurse
+          Copy-Item "Layouts_1.8" -Destination $dist -Recurse
+          Copy-Item "ScpVBus" -Destination $dist -Recurse
+
+          Compress-Archive -Path "$dist\*" -DestinationPath "mouse2joystick_Custom_CEMU.zip" -Force
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag_name || github.ref_name }}
+          name: Release ${{ github.event.inputs.tag_name || github.ref_name }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            mouse2joystick_Custom_CEMU.exe
+            mouse2joystick_Custom_CEMU.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
