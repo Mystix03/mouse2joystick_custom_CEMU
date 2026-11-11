@@ -37,7 +37,7 @@ jobs:
       - name: Compile mouse2joystick to EXE
         shell: pwsh
         run: |
-          & "C:\AutoHotkey\Compiler\Ahk2Exe.exe" /in "mouse2joystick_Custom_CEMU.ahk" /out "mouse2joystick_Custom_CEMU.exe" /base "C:\AutoHotkey\AutoHotkeyU64.exe"
+          cmd.exe /c '"C:\AutoHotkey\Compiler\Ahk2Exe.exe" /in mouse2joystick_Custom_CEMU.ahk /out mouse2joystick_Custom_CEMU.exe /bin "C:\AutoHotkey\Compiler\Unicode 64-bit.bin"'
           if (-not (Test-Path "mouse2joystick_Custom_CEMU.exe")) {
             throw "Compilation failed: mouse2joystick_Custom_CEMU.exe was not created."
           }
